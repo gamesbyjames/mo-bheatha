@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import HabitEditor from '../components/HabitEditor'
 import { useHabits, useSettings } from '../data/hooks'
-import { exportAll, importAll, moveHabit, resetAll, setHabitActive, updateSettings } from '../data/repo'
+import { exportAll, importAll, moveHabit, requestPersistence, resetAll, setHabitActive, updateSettings } from '../data/repo'
 import type { Habit } from '../data/types'
 import { dayKey } from '../lib/dates'
 import { isIOS, isStandalone } from '../lib/pwa'
@@ -149,6 +149,18 @@ export default function SettingsScreen() {
           before changing phones.
           {persisted === true && ' ✓ Storage is protected from automatic clean-up.'}
         </p>
+        {persisted === false && (
+          <button
+            onClick={async () => {
+              const ok = await requestPersistence()
+              setPersisted(ok)
+              toast(ok ? 'Storage protected ✓' : "Your browser didn't allow it. Export backups to be safe.", ok ? 'good' : 'neutral')
+            }}
+            className="press mb-2 w-full rounded-xl bg-slate-800 py-3 text-sm font-semibold"
+          >
+            🛡️ Protect data on this device
+          </button>
+        )}
         <div className="grid grid-cols-2 gap-2">
           <button onClick={doExport} className="press rounded-xl bg-slate-800 py-3 font-semibold">
             ⬆️ Export

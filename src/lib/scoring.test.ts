@@ -49,13 +49,13 @@ describe('dates', () => {
 describe('scoreDay', () => {
   it('sums positives, negatives and check-in', () => {
     const d = nonBonusDay('2026-01-05')
-    const s = scoreDay(d, [log(d, 15), log(d, -5, 'b')], true, S)
+    const s = scoreDay(d, [log(d, 15), log(d, -5, 'b')], { checkedIn: true, goalLogs: 0 }, S)
     expect(s).toMatchObject({ positive: 15, negative: -5, checkIn: 5, total: 15, win: false })
   })
   it('doubles only positive points on bonus days', () => {
     let d = '2026-01-01'
     while (!isBonusDay(d, 42)) d = addDays(d, 1)
-    const s = scoreDay(d, [log(d, 20), log(d, -5, 'b')], false, { ...S, seed: 42 })
+    const s = scoreDay(d, [log(d, 20), log(d, -5, 'b')], { checkedIn: false, goalLogs: 0 }, { ...S, seed: 42 })
     expect(s.total).toBe(35)
     expect(s.bonus).toBe(true)
   })

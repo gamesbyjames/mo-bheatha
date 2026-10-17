@@ -16,12 +16,18 @@ export const BONUS_MULTIPLIER = 2
 export const FREEZE_EVERY = 7
 export const MAX_FREEZES = 2
 export const STARTING_FREEZES = 1
+/** Points for logging a long-term goal (once per goal per day) */
+export const GOAL_LOG_POINTS = 5
+/** XP for each 10% of the way to a long-term goal */
+export const MILESTONE_XP = 25
 
 export interface DayScore {
   date: DayKey
   positive: number
   negative: number
   checkIn: number
+  goalLogs: number
+  goalPoints: number
   bonus: boolean
   total: number
   win: boolean
@@ -42,10 +48,16 @@ export function isBonusDay(date: DayKey, seed: number): boolean {
   return (hash(`${date}#${seed}`) % 10_000) / 10_000 < BONUS_CHANCE
 }
 
+export interface DayExtras {
+  checkedIn: boolean
+  /** Number of different long-term goals logged that day */
+  goalLogs: number
+}
+
 export function scoreDay(
   date: DayKey,
   logs: HabitLog[],
-  checkedIn: boolean,
+  extras: DayExtras,
   settings: Pick<Settings, 'dailyGoal' | 'checkInPoints' | 'seed'>,
 ): DayScore {
   let positive = 0
@@ -55,9 +67,20 @@ export function scoreDay(
     else negative += l.points
   }
   const bonus = isBonusDay(date, settings.seed)
-  const checkIn = checkedIn ? settings.checkInPoints : 0
-  const total = positive * (bonus ? BONUS_MULTIPLIER : 1) + checkIn + negative
-  return { date, positive, negative, checkIn, bonus, total, win: total >= settings.dailyGoal }
+  const checkIn = extras.checkedIn ? settings.checkInPoints : 0
+  const goalPoints = extras.goalLogs * GOAL_LOG_POINTS
+  const total = positive * (bonus ? BONUS_MULTIPLIER : 1) + checkIn + goalPoints + negative
+  return {
+    date,
+    positive,
+    negative,
+    checkIn,
+    goalLogs: extras.goalLogs,
+    goalPoints,
+    bonus,
+    total,
+    win: total >= settings.dailyGoal,
+  }
 }
 
 /** XP needed to reach level n: 0, 100, 300, 600, 1000, ... */
@@ -89,13 +112,13 @@ export interface Progress {
  * Walks every day from the first activity up to today.
  * Today only counts toward the streak once it's won; until then it's "at risk".
  */
-export function computeProgress(scores: Map<DayKey, DayScore>, today: DayKey): Progress {
+export function computeProgress(scores: Map<DayKey, DayScore>, today: DayKey, bonusXp = 0): Progress {
   const dates = [...scores.keys()].filter((d) => daysBetween(d, today) >= 0).sort()
   let streak = 0
   let best = 0
   let freezes = STARTING_FREEZES
   let winsTowardFreeze = 0
-  let xp = 0
+  let xp = bonusXp
   let winDays = 0
   const frozenDays = new Set<DayKey>()
 
@@ -154,6 +177,7 @@ export function buildScores(
   habitLogs: HabitLog[],
   checkInDates: Set<DayKey>,
   settings: Pick<Settings, 'dailyGoal' | 'checkInPoints' | 'seed'>,
+  goalLogsByDate: Map<DayKey, number> = new Map(),
 ): Map<DayKey, DayScore> {
   const byDate = new Map<DayKey, HabitLog[]>()
   for (const l of habitLogs) {
@@ -161,8 +185,8 @@ export function buildScores(
     if (arr) arr.push(l)
     else byDate.set(l.date, [l])
   }
-  const allDates = new Set<DayKey>([...byDate.keys(), ...checkInDates])
+  const allDates = new Set<DayKey>([...byDate.keys(), ...checkInDates, ...goalLogsByDate.keys()])
   const out = new Map<DayKey, DayScore>()
-  for (const d of allDates) out.set(d, scoreDay(d, byDate.get(d) ?? [], checkInDates.has(d), settings))
+  for (const d of allDates) out.set(d, scoreDay(d, byDate.get(d) ?? [], { checkedIn: checkInDates.has(d), goalLogs: goalLogsByDate.get(d) ?? 0 }, settings))
   return out
 }

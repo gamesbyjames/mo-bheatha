@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import HabitEditor from '../components/HabitEditor'
+import { Toggle } from '../components/Sheet'
+import { formatAmount } from '../lib/habits'
+import { GOAL_LOG_POINTS, MILESTONE_XP } from '../lib/scoring'
 import { useHabits, useSettings } from '../data/hooks'
 import { exportAll, importAll, moveHabit, requestPersistence, resetAll, setHabitActive, updateSettings } from '../data/repo'
 import type { Habit } from '../data/types'
@@ -84,8 +87,7 @@ export default function SettingsScreen() {
                 <span className="flex-1">
                   <span className="block font-semibold">{h.name}</span>
                   <span className="text-xs text-slate-500">
-                    {h.kind === 'do' ? 'Do' : 'Avoid'} · +{h.points}
-                    {h.kind === 'avoid' && h.slipPoints ? ` / ${h.slipPoints}` : ''}
+                    {habitSummary(h)}
                   </span>
                 </span>
               </button>
@@ -134,12 +136,20 @@ export default function SettingsScreen() {
         </div>
         <p className="mt-2 text-xs leading-relaxed text-slate-500">
           Reach your daily goal to keep your streak. Every 7 goal days earns a ❄️ freeze (max 2), which covers a missed day
-          automatically. About 1 day in 7 is a surprise ⚡ bonus day with double points. Slips lower that day's score but never
-          your level.
+          automatically. About 1 day in 7 is a surprise ⚡ bonus day with double habit points. Habits with repeat taps can be
+          tapped up to 3 times (each ✓ or ✗ counts again). Logging a goal earns +{GOAL_LOG_POINTS} once a day, and every 10%
+          of the way to a goal earns +{MILESTONE_XP} XP. Slips lower that day's score but never your level.
         </p>
       </Section>
 
-      <Section title="Feel tags">
+      <Section title="Feel">
+        <Toggle
+          checked={settings.trackPain}
+          onChange={(trackPain) => updateSettings({ trackPain })}
+          label="Track pain (body map)"
+          sub="Tap where it hurts on a body outline when you check in"
+        />
+        <div className="mt-3 mb-1.5 text-xs text-slate-500">Quick tags</div>
         <TagEditor tags={settings.feelTags} onSave={(feelTags) => updateSettings({ feelTags })} />
       </Section>
 
@@ -187,9 +197,18 @@ export default function SettingsScreen() {
 
       <p className="pb-4 text-center text-xs text-slate-600">Mo Bheatha · v{__APP_VERSION__}</p>
 
-      {editing !== undefined && <HabitEditor habit={editing} onClose={() => setEditing(undefined)} />}
+      {editing !== undefined && (
+        <HabitEditor habit={editing} existingNames={habits.map((h) => h.name)} onClose={() => setEditing(undefined)} />
+      )}
     </div>
   )
+}
+
+function habitSummary(h: Habit): string {
+  if (h.kind === 'target') return `Target · ${formatAmount(h.target ?? 0)} ${h.unit ?? ''} · +${h.points}`
+  const rep = h.repeatable !== false ? ' · ×3' : ''
+  if (h.kind === 'avoid') return `Avoid · +${h.points}${h.slipPoints ? ` / ${h.slipPoints}` : ''}${rep}`
+  return `Do · +${h.points}${rep}`
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {

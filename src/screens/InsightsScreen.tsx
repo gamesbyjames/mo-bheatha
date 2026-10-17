@@ -34,6 +34,11 @@ export default function InsightsScreen() {
     const pains = chart.map((c) => c.pain).filter((p): p is number => p != null)
     const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null)
 
+    const avoidIds = new Set(habits.filter((h) => h.kind === 'avoid').map((h) => h.id))
+    const urges = habitLogs
+      .filter((l) => inRange.has(l.date) && avoidIds.has(l.habitId) && l.value > 1)
+      .reduce((n, l) => n + l.value - 1, 0)
+
     const impacts = habits
       .filter((h) => h.active)
       .map((h) => ({ habit: h, impact: habitImpact(h.id, offset ? dates.slice(0, -1) : dates, habitLogs, feel, offset) }))
@@ -46,11 +51,13 @@ export default function InsightsScreen() {
       avgPain: avg(pains),
       wins: dates.filter((d) => scores.get(d)?.win).length,
       logCount: feelInRange.length,
+      urges,
     }
   }, [data, habits, range, offset])
 
   if (!data || !computed) return null
   const { progress } = data
+  const trackPain = data.settings.trackPain
 
   return (
     <div className="space-y-5">
@@ -70,8 +77,12 @@ export default function InsightsScreen() {
         <Tile label="Streak" value={`🔥${progress.streak}`} sub={`best ${progress.bestStreak}`} />
         <Tile label="Goal days" value={`${computed.wins}`} sub={`of ${range}`} />
         <Tile label="Avg mood" value={computed.avgMood ? moodFace(computed.avgMood) : '–'} sub={computed.avgMood?.toFixed(1) ?? 'no data'} />
-        <Tile label="Avg pain" value={computed.avgPain?.toFixed(1) ?? '–'} sub="per check-in" />
-        <Tile label="Check-ins" value={`${computed.logCount}`} sub={`in ${range}d`} />
+        <Tile label="Urges beaten" value={`💪${computed.urges}`} sub={`in ${range}d`} />
+        {trackPain ? (
+          <Tile label="Avg pain" value={computed.avgPain?.toFixed(1) ?? '–'} sub="per check-in" />
+        ) : (
+          <Tile label="Check-ins" value={`${computed.logCount}`} sub={`in ${range}d`} />
+        )}
       </div>
 
       <Card title="Points per day">
@@ -87,21 +98,21 @@ export default function InsightsScreen() {
         </ResponsiveContainer>
       </Card>
 
-      <Card title="Mood and pain">
+      <Card title={trackPain ? 'Mood and pain' : 'Mood'}>
         <ResponsiveContainer width="100%" height={180}>
-          <ComposedChart data={computed.chart} margin={{ top: 5, right: -20, left: -25, bottom: 0 }}>
+          <ComposedChart data={computed.chart} margin={{ top: 5, right: trackPain ? -20 : 5, left: -25, bottom: 0 }}>
             <CartesianGrid stroke="#1e293b" vertical={false} />
             <XAxis dataKey="date" tick={{ fill: '#64748b', fontSize: 10 }} interval="preserveStartEnd" minTickGap={20} />
-            <YAxis yAxisId="pain" tick={{ fill: '#f87171', fontSize: 10 }} allowDecimals={false} />
-            <YAxis yAxisId="mood" orientation="right" domain={[1, 5]} ticks={[1, 2, 3, 4, 5]} tick={{ fill: '#34d399', fontSize: 10 }} />
+            <YAxis yAxisId="pain" hide={!trackPain} tick={{ fill: '#f87171', fontSize: 10 }} allowDecimals={false} />
+            <YAxis yAxisId="mood" orientation={trackPain ? 'right' : 'left'} domain={[1, 5]} ticks={[1, 2, 3, 4, 5]} tick={{ fill: '#34d399', fontSize: 10 }} />
             <Tooltip contentStyle={tooltipStyle} />
             <Line yAxisId="mood" dataKey="mood" stroke="#34d399" strokeWidth={2.5} dot={{ r: 2 }} connectNulls />
-            <Line yAxisId="pain" dataKey="pain" stroke="#f87171" strokeWidth={2.5} dot={{ r: 2 }} connectNulls />
+            {trackPain && <Line yAxisId="pain" dataKey="pain" stroke="#f87171" strokeWidth={2.5} dot={{ r: 2 }} connectNulls />}
           </ComposedChart>
         </ResponsiveContainer>
         <div className="mt-1 flex justify-center gap-4 text-xs">
           <span className="text-emerald-400">● Mood (1–5)</span>
-          <span className="text-red-400">● Pain score</span>
+          {trackPain && <span className="text-red-400">● Pain score</span>}
         </div>
       </Card>
 
@@ -123,11 +134,12 @@ export default function InsightsScreen() {
         </p>
         <ul className="space-y-2">
           {computed.impacts.map(({ habit, impact }) => (
-            <ImpactRow key={habit.id} emoji={habit.emoji} name={habit.name} impact={impact} />
+            <ImpactRow key={habit.id} emoji={habit.emoji} name={habit.name} impact={impact} showPain={trackPain} />
           ))}
         </ul>
       </Card>
 
+      {trackPain && (
       <Card title={`Where it hurt (last ${range} days)`}>
         {computed.logCount === 0 ? (
           <p className="py-6 text-center text-sm text-slate-500">No check-ins yet.</p>
@@ -142,6 +154,7 @@ export default function InsightsScreen() {
           </div>
         )}
       </Card>
+      )}
     </div>
   )
 }
@@ -182,7 +195,7 @@ function Delta({ label, a, b, higherIsBetter }: { label: string; a: number | nul
   )
 }
 
-function ImpactRow({ emoji, name, impact }: { emoji: string; name: string; impact: Impact }) {
+function ImpactRow({ emoji, name, impact, showPain }: { emoji: string; name: string; impact: Impact; showPain: boolean }) {
   const enough = impact.nWith >= MIN_SAMPLES && impact.nWithout >= MIN_SAMPLES
   return (
     <li className="flex items-center gap-3 rounded-xl bg-slate-800/50 p-2.5">
@@ -192,7 +205,7 @@ function ImpactRow({ emoji, name, impact }: { emoji: string; name: string; impac
         {enough ? (
           <div className="flex flex-wrap gap-x-3 text-xs">
             <Delta label="Mood" a={impact.moodWith} b={impact.moodWithout} higherIsBetter />
-            <Delta label="Pain" a={impact.painWith} b={impact.painWithout} higherIsBetter={false} />
+            {showPain && <Delta label="Pain" a={impact.painWith} b={impact.painWithout} higherIsBetter={false} />}
           </div>
         ) : (
           <div className="text-xs text-slate-500">

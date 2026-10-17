@@ -1,15 +1,14 @@
 import type { FeelLog, HabitLog } from '../data/types'
 import { addDays, type DayKey } from './dates'
+import { expandLegacy, painScore } from './body'
+
+export { painScore }
 
 export interface DayFeel {
   mood: number | null
   /** Average across the day's logs of total pain (sum of region intensities) */
   pain: number
   count: number
-}
-
-export function painScore(pain: Record<string, number>): number {
-  return Object.values(pain).reduce((a, b) => a + b, 0)
 }
 
 export function dailyFeel(logs: FeelLog[]): Map<DayKey, DayFeel> {
@@ -52,7 +51,7 @@ export function habitImpact(
   feel: Map<DayKey, DayFeel>,
   offset: 0 | 1,
 ): Impact {
-  const done = new Set(habitLogs.filter((l) => l.habitId === habitId && l.value === 1).map((l) => l.date))
+  const done = new Set(habitLogs.filter((l) => l.habitId === habitId && l.value > 0).map((l) => l.date))
   const mW: number[] = [], mWo: number[] = [], pW: number[] = [], pWo: number[] = []
   let nWith = 0
   let nWithout = 0
@@ -76,7 +75,7 @@ export function habitImpact(
 export function painHeat(logs: FeelLog[]): Record<string, number> {
   if (!logs.length) return {}
   const sum: Record<string, number> = {}
-  for (const l of logs) for (const [r, v] of Object.entries(l.pain)) sum[r] = (sum[r] ?? 0) + v
+  for (const l of logs) for (const [r, v] of Object.entries(expandLegacy(l.pain))) sum[r] = (sum[r] ?? 0) + v
   const max = Math.max(...Object.values(sum), 1)
   return Object.fromEntries(Object.entries(sum).map(([r, v]) => [r, v / max]))
 }

@@ -3,7 +3,7 @@ import BodyMap from '../components/BodyMap'
 import { useFeelLogs, useSettings, useToday } from '../data/hooks'
 import { addFeelLog, deleteFeelLog, updateSettings } from '../data/repo'
 import type { PainMap } from '../data/types'
-import { PAIN_COLORS, PAIN_LABELS, REGION_LABELS } from '../lib/body'
+import { describePain, expandLegacy, PAIN_COLORS, PAIN_LABELS, REGION_LABELS } from '../lib/body'
 import { timeOf } from '../lib/dates'
 import { confetti } from '../lib/fx'
 import { toast } from '../lib/toast'
@@ -20,6 +20,7 @@ export default function FeelScreen() {
 
   if (!settings || !logs) return null
   const view = settings.bodyView
+  const trackPain = settings.trackPain
   const todays = logs.filter((l) => l.date === today).reverse()
   const lastWithPain = [...logs].reverse().find((l) => Object.keys(l.pain).length > 0)
   const hasInput = mood !== null || Object.keys(pain).length > 0 || tags.length > 0
@@ -39,7 +40,7 @@ export default function FeelScreen() {
     if (!hasInput || saving) return
     setSaving(true)
     const first = todays.length === 0
-    await addFeelLog({ mood, pain, tags })
+    await addFeelLog({ mood, pain: trackPain ? pain : {}, tags })
     setMood(null)
     setPain({})
     setTags([])
@@ -93,6 +94,7 @@ export default function FeelScreen() {
       </section>
 
       {/* Body */}
+      {trackPain && (
       <section className="rounded-3xl bg-slate-900 p-3 ring-1 ring-slate-800">
         <div className="flex items-center justify-between">
           <div className="flex rounded-full bg-slate-800 p-1 text-sm font-semibold">
@@ -107,7 +109,7 @@ export default function FeelScreen() {
             ))}
           </div>
           {lastWithPain && Object.keys(pain).length === 0 && (
-            <button onClick={() => setPain({ ...lastWithPain.pain })} className="press rounded-full bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-300">
+            <button onClick={() => setPain(expandLegacy(lastWithPain.pain))} className="press rounded-full bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-300">
               ↺ Same as last
             </button>
           )}
@@ -137,6 +139,7 @@ export default function FeelScreen() {
           </div>
         )}
       </section>
+      )}
 
       <div className="sticky bottom-0 -mx-4 bg-gradient-to-t from-slate-950 via-slate-950 to-transparent px-4 pb-2 pt-4">
         <button
@@ -160,7 +163,7 @@ export default function FeelScreen() {
                   <div className="font-semibold text-slate-300">{timeOf(l.ts)}</div>
                   <div className="text-slate-400">
                     {[
-                      ...Object.entries(l.pain).map(([r, v]) => `${REGION_LABELS[r]} (${PAIN_LABELS[v].toLowerCase()})`),
+                      ...describePain(l.pain),
                       ...l.tags,
                     ].join(' · ') || 'Mood only'}
                   </div>
@@ -176,6 +179,18 @@ export default function FeelScreen() {
             ))}
           </ul>
         </section>
+      )}
+
+      {!trackPain && (
+        <button
+          onClick={() => {
+            updateSettings({ trackPain: true })
+            toast('Body map turned on. Turn it off any time in ⚙️', 'good')
+          }}
+          className="block w-full py-2 text-center text-xs font-semibold text-slate-500"
+        >
+          Dealing with pain? Track it with a body map
+        </button>
       )}
     </div>
   )
